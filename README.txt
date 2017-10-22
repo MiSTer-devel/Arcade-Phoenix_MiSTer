@@ -1,0 +1,26 @@
+---------------------------------------------------------------------------------
+-- 
+-- Arcade: Phoenix port to MiSTer by Sorgelig
+-- 22 October 2017
+-- 
+---------------------------------------------------------------------------------
+-- Phoenix (Amstar) FPGA - DAR - 2016
+-- http://darfpga.blogspot.fr
+---------------------------------------------------------------------------------
+-- 
+-- 
+-- Keyboard players inputs :
+--
+--   F3          : Add coin
+--   F2          : Start 2 players
+--   F1          : Start 1 player
+--   SPACE       : Fire  
+--   UP    arrow : Move up 
+--   DOWN  arrow : Move down
+--   CTRL        : Barrier(Shield)
+--
+-- Joystick support.
+-- 
+-- 
+---------------------------------------------------------------------------------
+
