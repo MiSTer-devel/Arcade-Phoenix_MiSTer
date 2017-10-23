@@ -32,15 +32,11 @@ module emu
 	inout  [43:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
-	output        CLK_VIDEO,
+	output        VGA_CLK,
 
-	//Multiple resolutions are supported using different CE_PIXEL rates.
+	//Multiple resolutions are supported using different VGA_CE rates.
 	//Must be based on CLK_VIDEO
-	output        CE_PIXEL,
-
-	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
-	output  [7:0] VIDEO_ARX,
-	output  [7:0] VIDEO_ARY,
+	output        VGA_CE,
 
 	output  [7:0] VGA_R,
 	output  [7:0] VGA_G,
@@ -48,6 +44,24 @@ module emu
 	output        VGA_HS,
 	output        VGA_VS,
 	output        VGA_DE,    // = ~(VBlank | HBlank)
+
+	//Base video clock. Usually equals to CLK_SYS.
+	output        HDMI_CLK,
+
+	//Multiple resolutions are supported using different HDMI_CE rates.
+	//Must be based on CLK_VIDEO
+	output        HDMI_CE,
+
+	output  [7:0] HDMI_R,
+	output  [7:0] HDMI_G,
+	output  [7:0] HDMI_B,
+	output        HDMI_HS,
+	output        HDMI_VS,
+	output        HDMI_DE,    // = ~(VBlank | HBlank)
+
+	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
+	output  [7:0] HDMI_ARX,
+	output  [7:0] HDMI_ARY,
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -103,23 +117,24 @@ assign LED_USER  = 0;
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
 
-assign VIDEO_ARX = status[1] ? 8'd16 : 8'd4;
-assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3; 
+assign HDMI_ARX = status[1] ? 8'd16 : status[2] ? 8'd4 : 8'd1;
+assign HDMI_ARY = status[1] ? 8'd9  : status[2] ? 8'd3 : 8'd1;
 
 `include "build_id.v" 
 localparam CONF_STR = {
 	"A.PHNX;;",
 	"-;",
-	"O1,Aspect ratio,4:3,16:9;",
+	"O1,Aspect Ratio,Original,Wide;",
+	"O2,Orientation,Vert,Horz;",
 	"-;",
 	"T6,Reset;",
 	"J,Fire,Barrier,Start 1P,Coin;",
-	"V,v1.00.",`BUILD_DATE
+	"V,v1.50.",`BUILD_DATE
 };
 
 ////////////////////   CLOCKS   ///////////////////
 
-wire clk_sys;
+wire clk_sys, clk_hdmi;
 wire pll_locked;
 
 pll pll
@@ -127,6 +142,7 @@ pll pll
 	.refclk(CLK_50M),
 	.rst(0),
 	.outclk_0(clk_sys),
+	.outclk_1(clk_hdmi),
 	.locked(pll_locked)
 );
 
@@ -164,32 +180,72 @@ always @(posedge clk_sys) begin
 	
 	if(old_state != ps2_key[64]) begin
 		casex(code)
-			'hX75: btn_right        <= pressed; // up
-			'hX72: btn_left         <= pressed; // down
-			'h029: btn_fire         <= pressed; // space
-			'h005: btn_one_player   <= pressed; // F1
-			'h006: btn_two_players  <= pressed; // F2
-			'h004: btn_coin         <= pressed; // F3
-			'hX14: btn_barrier      <= pressed; // ctrl
+			'hX75: btn_up          <= pressed; // up
+			'hX72: btn_down        <= pressed; // down
+			'hX6B: btn_left        <= pressed; // left
+			'hX74: btn_right       <= pressed; // right
+			'h029: btn_fire        <= pressed; // space
+			'hX14: btn_barrier     <= pressed; // ctrl
+
+			'h005: btn_one_player  <= pressed; // F1
+			'h006: btn_two_players <= pressed; // F2
+			'h004: btn_coin        <= pressed; // F3
 		endcase
 	end
 end
 
-reg btn_coin = 0;
-reg btn_one_player = 0;
-reg btn_two_players = 0;
-reg btn_fire = 0;
+reg btn_up      = 0;
+reg btn_down    = 0;
+reg btn_right   = 0;
+reg btn_left    = 0;
+reg btn_fire    = 0;
 reg btn_barrier = 0;
-reg btn_right = 0;
-reg btn_left = 0;
+reg btn_coin        = 0;
+reg btn_one_player  = 0;
+reg btn_two_players = 0;
 
+wire m_left   = status[2] ? btn_down  | joy[2] : btn_left  | joy[1];
+wire m_right  = status[2] ? btn_up    | joy[3] : btn_right | joy[0];
+
+wire hblank, vblank;
+wire ce_vid;
+wire hs, vs;
+wire rde, rhs, rvs;
 wire [1:0] r,g,b;
+wire [1:0] rr,rg,rb;
 
-assign CLK_VIDEO = clk_sys;
-assign VGA_R  = {r,r,r,r};
-assign VGA_G  = {g,g,g,g};
-assign VGA_B  = {b,b,b,b};
-assign VGA_DE = ~(vblank | hblankb);
+assign VGA_CLK  = clk_sys;
+assign VGA_CE   = ce_vid;
+assign VGA_R    = {r,r,r,r};
+assign VGA_G    = {g,g,g,g};
+assign VGA_B    = {b,b,b,b};
+assign VGA_DE   = ~(vblank | hblank);
+assign VGA_HS   = hs;
+assign VGA_VS   = vs;
+
+assign HDMI_CLK = status[2] ? VGA_CLK: clk_hdmi;
+assign HDMI_CE  = status[2] ? VGA_CE : 1'b1;
+assign HDMI_R   = status[2] ? VGA_R  : {rr,rr,rr,rr};
+assign HDMI_G   = status[2] ? VGA_G  : {rg,rg,rg,rg};
+assign HDMI_B   = status[2] ? VGA_B  : {rb,rb,rb,rb};
+assign HDMI_DE  = status[2] ? VGA_DE : rde;
+assign HDMI_HS  = status[2] ? VGA_HS : rhs;
+assign HDMI_VS  = status[2] ? VGA_VS : rvs;
+
+screen_rotate #(239,208,6) screen_rotate
+(
+	.clk_in(clk_sys),
+	.ce_in(ce_vid),
+	.video_in({r,g,b}),
+	.hblank(hblank),
+	.vblank(vblank),
+
+	.clk_out(clk_hdmi),
+	.video_out({rr,rg,rb}),
+	.hsync(rhs),
+	.vsync(rvs),
+	.de(rde)
+);
 
 wire [11:0] audio;
 assign AUDIO_L = {audio, 4'b0000};
@@ -213,34 +269,33 @@ assign AUDIO_S = 0;
 // Cocktail,Factory,Factory,Factory,Bonus2,Bonus1,Ships2,Ships1
 wire [7:0] dip_switch = 8'b00001111;
 
-wire vblank, hblankb, hblankf;
 phoenix phoenix
 (
+	.clk(clk_sys),
+
 	.reset(RESET | status[0] | status[6] | buttons[1]),
 
-	.clk(clk_sys),
-	.ce_pix(CE_PIXEL),
+	.video_r(r),
+	.video_g(g),
+	.video_b(b),
+	.ce_pix(ce_vid),
+	.video_hs(hs),
+	.video_vs(vs),
+	.video_hblank_bg(hblank),
+	.video_vblank(vblank),
+
+	.audio_select(0),
+	.audio(audio),
 
 	.dip_switch(dip_switch),
 
 	.btn_coin(btn_coin | joy[7]),
 	.btn_player_start({btn_two_players, btn_one_player | joy[6]}),
-	.btn_left(btn_left | joy[2]),
-	.btn_right(btn_right | joy[3]),
+	.btn_left(m_left),
+	.btn_right(m_right),
 	.btn_barrier(btn_barrier | joy[5]),
 	.btn_fire(btn_fire | joy[4]),
 
-	.video_r(r),
-	.video_g(g),
-	.video_b(b),
-	.video_hs(VGA_HS),
-	.video_vs(VGA_VS),
-	.video_vblank(vblank),
-	.video_hblank_bg(hblankb),
-	.video_hblank_fg(hblankf),
-
-	.audio_select(0),
-	.audio(audio)
 );
 
 endmodule

@@ -8,15 +8,18 @@
 -- http://darfpga.blogspot.fr
 ---------------------------------------------------------------------------------
 -- 
+-- Support screen and controls rotation on HDMI output.
+-- Only controls are rotated on VGA output.
 -- 
--- Keyboard players inputs :
+-- 
+-- Keyboard inputs :
 --
 --   F3          : Add coin
 --   F2          : Start 2 players
 --   F1          : Start 1 player
 --   SPACE       : Fire  
---   UP    arrow : Move up 
---   DOWN  arrow : Move down
+--   UP/RIGHT    : Move up 
+--   DOWN/LEFT   : Move down
 --   CTRL        : Barrier(Shield)
 --
 -- Joystick support.
