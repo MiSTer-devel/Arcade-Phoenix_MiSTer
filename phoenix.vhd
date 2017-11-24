@@ -22,6 +22,10 @@ port(
 	reset        : in std_logic;
 	ce_pix       : out std_logic;
 	
+	dn_addr    : in  std_logic_vector(15 downto 0);
+	dn_data    : in  std_logic_vector(7 downto 0);
+	dn_wr      : in  std_logic;
+
 	dip_switch   : in std_logic_vector(7 downto 0);
 	-- game controls, normal logic '1':pressed, '0':released
  
@@ -128,6 +132,9 @@ architecture struct of phoenix is
  signal player_start : std_logic_vector(1 downto 0);
  signal buttons      : std_logic_vector(3 downto 0);
  signal R_autofire   : std_logic_vector(21 downto 0);
+ 
+ signal romp_cs, rom23_cs, rom24_cs, rom39_cs, rom40_cs : std_logic;
+
 begin
 
 -- game core uses inverted control logic
@@ -287,60 +294,103 @@ color_id  <=  (fr_bit0 or fr_bit1) &  fr_bit1 & fr_bit0 & fr_lin when (fr_bit0 o
 palette_adr <= '0' & color_set & color_id;
 
 -- output video to top level
-video_vblank <= vblank;
-video_hblank_fg <= hblank_frgrd;
-video_hblank_bg <= hblank_bkgrd;
-video_r     <= rgb_1(0) & rgb_0(0) when (hcnt>=192) else "00";
-video_g     <= rgb_1(2) & rgb_0(2) when (hcnt>=192) else "00";
-video_b     <= rgb_1(1) & rgb_0(1) when (hcnt>=192) else "00";
+process begin
+	wait until rising_edge(clk);
+	if ce_pix1='1' then 
+		video_vblank <= vblank;
+		video_hblank_fg <= hblank_frgrd;
+		video_hblank_bg <= hblank_bkgrd;
+		if hcnt>=192 then
+			video_r <= rgb_1(0) & rgb_0(0);
+			video_g <= rgb_1(2) & rgb_0(2);
+			video_b <= rgb_1(1) & rgb_0(1);
+		else
+			video_r <= "00";
+			video_g <= "00";
+			video_b <= "00";
+		end if;
+	end if;
+end process;
 
 G_yes_tile_rom: if C_tile_rom generate
+
+romp_cs  <= '1' when dn_addr(15 downto 14) = "00"    else '0';
+rom23_cs <= '1' when dn_addr(15 downto 11) = "01000" else '0';
+rom24_cs <= '1' when dn_addr(15 downto 11) = "01001" else '0';
+rom39_cs <= '1' when dn_addr(15 downto 11) = "01010" else '0';
+rom40_cs <= '1' when dn_addr(15 downto 11) = "01011" else '0';
+
+
 -- foreground graphix ROM bit0
-frgnd_bit0 : entity work.prom_ic39
-port map(
-	clk  => clk,
-	addr => frgnd_graph_adr,
-	data => frgnd_bit0_graph
+frgnd_bit0 : work.dpram generic map (11,8)
+port map
+(
+	clock_a   => clk,
+	wren_a    => dn_wr and rom39_cs,
+	address_a => dn_addr(10 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clk,
+	address_b => frgnd_graph_adr,
+	q_b       => frgnd_bit0_graph
 );
 
 -- foreground graphix ROM bit1
-frgnd_bit1 : entity work.prom_ic40
-port map(
-	clk  => clk,
-	addr => frgnd_graph_adr,
-	data => frgnd_bit1_graph
+frgnd_bit1 : work.dpram generic map (11,8)
+port map
+(
+	clock_a   => clk,
+	wren_a    => dn_wr and rom40_cs,
+	address_a => dn_addr(10 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clk,
+	address_b => frgnd_graph_adr,
+	q_b       => frgnd_bit1_graph
 );
 
 -- background graphix ROM bit0
-bkgnd_bit0 : entity work.prom_ic23
-port map(
-	clk  => clk,
-	addr => bkgnd_graph_adr,
-	data => bkgnd_bit0_graph
+bkgnd_bit0 : work.dpram generic map (11,8)
+port map
+(
+	clock_a   => clk,
+	wren_a    => dn_wr and rom23_cs,
+	address_a => dn_addr(10 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clk,
+	address_b => bkgnd_graph_adr,
+	q_b       => bkgnd_bit0_graph
 );
 
 -- background graphix ROM bit1
-bkgnd_bit1 : entity work.prom_ic24
-port map(
-	clk  => clk,
-	addr => bkgnd_graph_adr,
-	data => bkgnd_bit1_graph
+bkgnd_bit1 : work.dpram generic map (11,8)
+port map
+(
+	clock_a   => clk,
+	wren_a    => dn_wr and rom24_cs,
+	address_a => dn_addr(10 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clk,
+	address_b => bkgnd_graph_adr,
+	q_b       => bkgnd_bit1_graph
 );
 
 -- color palette ROM RBG low intensity
-palette_0 : entity work.prom_palette_ic40
+palette_0 : entity work.palette_0
 port map(
 	clk  => clk,
 	addr => palette_adr(6 downto 0),
-	data => rgb_0
+	data(2 downto 0) => rgb_0
 );
 
 -- color palette ROM RBG high intensity
-palette_1 : entity work.prom_palette_ic41
+palette_1 : entity work.palette_1
 port map(
 	clk  => clk,
 	addr => palette_adr(6 downto 0),
-	data => rgb_1
+	data(2 downto 0) => rgb_1
 );
 end generate;
 
@@ -356,11 +406,18 @@ end generate;
 
 -- Program PROM
 S_prog_rom_addr(C_prog_rom_addr_bits-1 downto 0) <= cpu_adr(C_prog_rom_addr_bits-1 downto 0);
-prog : entity work.phoenix_prog
-port map(
-	clk  => clk,
-	addr => S_prog_rom_addr,
-	data => prog_do
+
+prog : work.dpram generic map (14,8)
+port map
+(
+	clock_a   => clk,
+	wren_a    => dn_wr and romp_cs,
+	address_a => dn_addr(13 downto 0),
+	data_a    => dn_data,
+
+	clock_b   => clk,
+	address_b => S_prog_rom_addr,
+	q_b       => prog_do
 );
 
 -- foreground RAM   0x4000-0x433F
