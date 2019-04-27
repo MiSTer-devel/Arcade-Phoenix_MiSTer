@@ -81,33 +81,39 @@ assign LED_USER  = ioctl_download;
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
 
-assign HDMI_ARX = status[1] ? 8'd16 : status[2] ? 8'd4 : 8'd1;
-assign HDMI_ARY = status[1] ? 8'd9  : status[2] ? 8'd3 : 8'd1;
+assign HDMI_ARX = status[1] ? 8'd16 : status[2] ? 8'd4 : 8'd3;
+assign HDMI_ARY = status[1] ? 8'd9  : status[2] ? 8'd3 : 8'd4;
 
 `include "build_id.v" 
 localparam CONF_STR = {
 	"A.PHNX;;",
+	"F,rom;", // allow loading of alternate ROMs
 	"-;",
 	"O1,Aspect Ratio,Original,Wide;",
 	"O2,Orientation,Vert,Horz;",
-	"O34,Scanlines(vert),No,25%,50%,75%;",
+	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
-	"T6,Reset;",
-	"J,Fire,Barrier,Start 1P,Start 2P;",
-	"V,v2.00.",`BUILD_DATE
+	"O89,Lives,3,4,5,6;",
+	"ODE,Bonus Life,3k/30k,4k/40k,5k/50k,6k/60k;",
+	"OC,Cabinet,Upright,Cocktail;",	
+	"-;",
+	"R0,Reset;",
+	"J1,Fire,Barrier,Start 1P,Start 2P;",
+	"V,v",`BUILD_DATE
 };
 
 ////////////////////   CLOCKS   ///////////////////
 
-wire clk_sys, clk_hdmi;
+wire clk_sys, clk_hdmi,clk_44;
 wire pll_locked;
 
 pll pll
 (
 	.refclk(CLK_50M),
 	.rst(0),
-	.outclk_0(clk_sys),
-	.outclk_1(clk_hdmi),
+	.outclk_0(clk_sys), // 11
+	.outclk_1(clk_hdmi), // 22
+	.outclk_2(clk_44), // 44
 	.locked(pll_locked)
 );
 
@@ -115,6 +121,7 @@ pll pll
 
 wire [31:0] status;
 wire  [1:0] buttons;
+wire        forced_scandoubler;
 
 wire        ioctl_download;
 wire        ioctl_wr;
@@ -135,6 +142,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 	.buttons(buttons),
 	.status(status),
+	.forced_scandoubler(forced_scandoubler),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),
@@ -163,6 +171,17 @@ always @(posedge clk_sys) begin
 
 			'h005: btn_one_player  <= pressed; // F1
 			'h006: btn_two_players <= pressed; // F2
+			// JPAC/IPAC/MAME Style Codes
+			'h016: btn_start_1     <= pressed; // 1
+			'h01E: btn_start_2     <= pressed; // 2
+			'h02E: btn_coin_1      <= pressed; // 5
+			'h036: btn_coin_2      <= pressed; // 6
+			'h02D: btn_up_2        <= pressed; // R
+			'h02B: btn_down_2      <= pressed; // F
+			'h023: btn_left_2      <= pressed; // D
+			'h034: btn_right_2     <= pressed; // G
+			'h01C: btn_fire_2      <= pressed; // A
+			'h01B: btn_barrier_2   <= pressed; // s
 		endcase
 	end
 end
@@ -176,55 +195,60 @@ reg btn_barrier = 0;
 reg btn_one_player  = 0;
 reg btn_two_players = 0;
 
+reg btn_start_1=0;
+reg btn_start_2=0;
+reg btn_coin_1=0;
+reg btn_coin_2=0;
+reg btn_up_2=0;
+reg btn_down_2=0;
+reg btn_left_2=0;
+reg btn_right_2=0;
+reg btn_fire_2=0;
+reg btn_barrier_2=0;
+
 wire m_left   = status[2] ? btn_down  | joy[2] : btn_left  | joy[1];
 wire m_right  = status[2] ? btn_up    | joy[3] : btn_right | joy[0];
 wire m_fire   = btn_fire | joy[4];
 wire m_barrier= btn_barrier | joy[5];
+
+wire m_left_2   = status[2] ? btn_down_2  | joy[2] : btn_left_2  | joy[1];
+wire m_right_2  = status[2] ? btn_up_2    | joy[3] : btn_right_2 | joy[0];
+wire m_fire_2  = btn_fire_2|joy[4];
+wire m_barrier_2 = btn_barrier_2 | joy[5];
+
 
 wire m_start1 = btn_one_player  | joy[6];
 wire m_start2 = btn_two_players | joy[7];
 wire m_coin   = m_start1 | m_start2;
 
 wire hblank, vblank;
-wire ce_vid;
 wire hs, vs;
-wire rde, rhs, rvs;
 wire [1:0] r,g,b;
-wire [1:0] rr,rg,rb;
 
-assign VGA_CLK  = clk_sys;
-assign VGA_CE   = ce_vid;
-assign VGA_R    = {r,r,r,r};
-assign VGA_G    = {g,g,g,g};
-assign VGA_B    = {b,b,b,b};
-assign VGA_DE   = ~(vblank | hblank);
-assign VGA_HS   = hs;
-assign VGA_VS   = vs;
+reg ce_pix;
+always @(posedge clk_44) begin
+        reg old_clk;
 
-assign HDMI_CLK = status[2] ? VGA_CLK: clk_hdmi;
-assign HDMI_CE  = status[2] ? VGA_CE : 1'b1;
-assign HDMI_R   = status[2] ? VGA_R  : {rr,rr,rr,rr};
-assign HDMI_G   = status[2] ? VGA_G  : {rg,rg,rg,rg};
-assign HDMI_B   = status[2] ? VGA_B  : {rb,rb,rb,rb};
-assign HDMI_DE  = status[2] ? VGA_DE : rde;
-assign HDMI_HS  = status[2] ? VGA_HS : rhs;
-assign HDMI_VS  = status[2] ? VGA_VS : rvs;
-assign HDMI_SL  = status[2] ? 2'd0   : status[4:3];
+        old_clk <= clk_sys;
+        ce_pix <= old_clk & ~clk_sys;
+end
 
-screen_rotate #(239,208,6) screen_rotate
+arcade_rotate_fx #(478,208,6) arcade_video
 (
-	.clk_in(clk_sys),
-	.ce_in(ce_vid),
-	.video_in({r,g,b}),
-	.hblank(hblank),
-	.vblank(vblank),
+        .*,
 
-	.clk_out(clk_hdmi),
-	.video_out({rr,rg,rb}),
-	.hsync(rhs),
-	.vsync(rvs),
-	.de(rde)
+        .clk_video(clk_44),
+
+        .RGB_in({r,g,b}),
+        .HBlank(hblank),
+        .VBlank(vblank),
+        .HSync(hs),
+        .VSync(vs),
+
+        .fx(status[5:3]),
+        .no_rotate(status[2])
 );
+//screen_rotate #(239,208,6) screen_rotate
 
 wire [11:0] audio;
 assign AUDIO_L = {audio, 4'b0000};
@@ -246,13 +270,18 @@ assign AUDIO_S = 0;
 //     ON            ON            3,000          30,000
 //
 // Cocktail,Factory,Factory,Factory,Bonus2,Bonus1,Ships2,Ships1
-wire [7:0] dip_switch = 8'b00001111;
+//	"O89,Lives,3,5,4,6;",
+//	"ODE,Bonus Life,3k/30k,4k/40k,5k/50k,6k/60k;",
+//	"OC,Cabinet,Upright,Cocktail;",	
+//8'b00001111;
+
+wire [7:0] dip_switch = { status[12],1'b0,1'b0,1'b0,status[14:13],status[9:8]};
 
 phoenix phoenix
 (
 	.clk(clk_sys),
 
-	.reset(RESET | status[0] | status[6] | buttons[1] | ioctl_download),
+	.reset(RESET | status[0] | buttons[1] | ioctl_download),
 
 	.dn_addr(ioctl_addr[15:0]),
 	.dn_data(ioctl_dout),
@@ -272,12 +301,12 @@ phoenix phoenix
 
 	.dip_switch(dip_switch),
 
-	.btn_coin(m_coin),
-	.btn_player_start({m_start2, m_start1}),
-	.btn_left(m_left),
-	.btn_right(m_right),
-	.btn_barrier(m_barrier),
-	.btn_fire(m_fire),
+	.btn_coin(m_coin|btn_coin_1|btn_coin_2),
+	.btn_player_start({m_start2|btn_start_2, m_start1|btn_start_1}),
+	.btn_left(m_left|m_left_2),
+	.btn_right(m_right|m_right_2),
+	.btn_barrier(m_barrier|m_barrier_2),
+	.btn_fire(m_fire|m_fire_2),
 
 );
 
