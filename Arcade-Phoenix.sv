@@ -246,15 +246,19 @@ reg ce_pix;
 always @(posedge clk_44) begin
         reg old_clk;
 
-        old_clk <= clk_sys;
-        ce_pix <= old_clk & ~clk_sys;
+        old_clk <= ce_vid;
+        ce_pix <= old_clk & ~ce_vid;
 end
 
-arcade_rotate_fx #(478,208,6) arcade_video
+wire ce_vid;
+//arcade_rotate_fx #(478,208,6) arcade_video
+//arcade_rotate_fx #(487,208,6) arcade_video
+arcade_rotate_fx #(496,208,6) arcade_video
 (
         .*,
 
         .clk_video(clk_44),
+        //.ce_pix(ce_vid),
 
         .RGB_in({r,g,b}),
         .HBlank(hblank),
