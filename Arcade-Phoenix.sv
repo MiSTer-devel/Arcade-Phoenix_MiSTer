@@ -100,8 +100,6 @@ assign HDMI_ARY = status[1] ? 8'd9  : status[2] ? 8'd3 : 8'd4;
 `include "build_id.v" 
 localparam CONF_STR = {
 	"A.PHNX;;",
-	"F,rom;", // allow loading of alternate ROMs
-	"-;",
 	"O1,Aspect Ratio,Original,Wide;",
 	"O2,Orientation,Vert,Horz;",
 	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
@@ -241,13 +239,21 @@ wire m_coin   = m_start1 | m_start2;
 wire hblank, vblank;
 wire hs, vs;
 wire [1:0] r,g,b;
-
+/*
 reg ce_pix;
 always @(posedge clk_44) begin
         reg old_clk;
 
         old_clk <= ce_vid;
         ce_pix <= old_clk & ~ce_vid;
+end
+*/
+reg ce_pix;
+always @(posedge clk_44) begin
+        reg [1:0] div;
+
+        div <= div + 1'd1;
+        ce_pix <= !div;
 end
 
 wire ce_vid;
