@@ -6,7 +6,7 @@
 	<year>1981</year>
 	<manufacturer>Centuri</manufacturer>
 	<category>Space / Shooter</category>
-	<rbf>Arcade-Phoenix</rbf>
+	<rbf>Phoenix</rbf>
 	<rom index="0" zip="pleiadce.zip" md5="902681424345327ad18175bde6505592">
 		<part crc="711e2ba0" name="pleiades.47"/>
 		<part crc="93a36943" name="pleiades.48"/>
