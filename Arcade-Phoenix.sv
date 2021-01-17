@@ -223,7 +223,7 @@ wire [1:0] r,g,b;
 
 reg ce_pix;
 always @(posedge clk_44) begin
-        reg [1:0] div;
+        reg [2:0] div;
 
         div <= div + 1'd1;
         ce_pix <= !div;
@@ -234,7 +234,7 @@ wire rotate_ccw = 0;
 wire no_rotate = status[2] | direct_video  ;
 screen_rotate screen_rotate (.*);
 
-arcade_video#(496,6) arcade_video
+arcade_video#(239,6) arcade_video
 (
         .*,
 
