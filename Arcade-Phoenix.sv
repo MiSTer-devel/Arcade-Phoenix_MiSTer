@@ -52,13 +52,17 @@ module emu
 	output [1:0]  VGA_SL,
 	output        VGA_SCALER, // Force VGA scaler
 
-	// Use framebuffer from DDRAM (USE_FB=1 in qsf)
+	input  [11:0] HDMI_WIDTH,
+	input  [11:0] HDMI_HEIGHT,
+
+`ifdef USE_FB
+	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
 	//    [3]   : 0=16bits 565 1=16bits 1555
 	//    [4]   : 0=RGB  1=BGR (for 16/24/32 modes)
 	//
-	// FB_STRIDE either 0 (rounded to 256 bytes) or multiple of 16 bytes.
+	// FB_STRIDE either 0 (rounded to 256 bytes) or multiple of pixel size (in bytes)
 	output        FB_EN,
 	output  [4:0] FB_FORMAT,
 	output [11:0] FB_WIDTH,
@@ -76,6 +80,7 @@ module emu
 	output [23:0] FB_PAL_DOUT,
 	input  [23:0] FB_PAL_DIN,
 	output        FB_PAL_WR,
+`endif
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -90,6 +95,7 @@ module emu
 	output [15:0] AUDIO_R,
 	output        AUDIO_S,    // 1 - signed audio samples, 0 - unsigned
 
+`ifdef USE_DDRAM
 	//High latency DDR3 RAM interface
 	//Use for non-critical time purposes
 	output        DDRAM_CLK,
@@ -102,6 +108,7 @@ module emu
 	output [63:0] DDRAM_DIN,
 	output  [7:0] DDRAM_BE,
 	output        DDRAM_WE,
+`endif
 
 	// Open-drain User port.
 	// 0 - D+/RX
@@ -109,7 +116,9 @@ module emu
 	// 2..6 - USR2..USR6
 	// Set USER_OUT to 1 to read from USER_IN.
 	input   [6:0] USER_IN,
-	output  [6:0] USER_OUT
+	output  [6:0] USER_OUT,
+
+	input         OSD_STATUS
 );
 
 assign VGA_F1    = 0;
@@ -136,11 +145,11 @@ localparam CONF_STR = {
 	"-;",
 	"O89,Lives,3,4,5,6;",
 	"ODE,Bonus Life,3k/30k,4k/40k,5k/50k,6k/60k;",
-	"OC,Cabinet,Upright,Cocktail;",	
+	"OC,Cabinet,Upright,Cocktail;",
 	"-;",
 	"R0,Reset;",
-	"J1,Fire,Barrier,Start 1P,Start 2P,Coin;",
-	"jn,A,B,Start,Select,R;",
+	"J1,Fire,Barrier,Start 1P,Start 2P,Coin,Pause;",
+	"jn,A,B,Start,Select,R,C;",
 	"V,v",`BUILD_DATE
 };
 
@@ -164,13 +173,16 @@ pll pll
 wire [31:0] status;
 wire  [1:0] buttons;
 wire        forced_scandoubler;
-wire	    direct_video;
+wire        direct_video;
 
 wire        ioctl_download;
+wire        ioctl_upload;
 wire        ioctl_wr;
 wire [24:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
-
+wire  [7:0] ioctl_din;
+wire  [7:0] ioctl_index;
+wire        ioctl_wait;
 
 wire [15:0] joystick_0, joystick_1;
 wire [15:0] joy = joystick_0 | joystick_1;
@@ -185,17 +197,21 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 	.conf_str(CONF_STR),
 
-        .buttons(buttons),
-        .status(status),
-        .status_menumask(direct_video),
-        .forced_scandoubler(forced_scandoubler),
-        .gamma_bus(gamma_bus),
-        .direct_video(direct_video),
+	.buttons(buttons),
+	.status(status),
+	.status_menumask(direct_video),
+	.forced_scandoubler(forced_scandoubler),
+	.gamma_bus(gamma_bus),
+	.direct_video(direct_video),
 
 	.ioctl_download(ioctl_download),
+	.ioctl_upload(ioctl_upload),
 	.ioctl_wr(ioctl_wr),
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_dout),
+	.ioctl_din(ioctl_din),
+	.ioctl_index(ioctl_index),
+	.ioctl_wait(ioctl_wait),
 
 	.joystick_0(joystick_0),
 	.joystick_1(joystick_1)
@@ -216,17 +232,51 @@ wire m_barrier_2 =joy[5];
 wire m_start1 = joy[6];
 wire m_start2 = joy[7];
 wire m_coin   =joy[8];
+wire m_pause  = joy[9];
+
+
+// PAUSE SYSTEM
+reg				pause;									// Pause signal (active-high)
+reg				pause_toggle = 1'b0;					// User paused (active-high)
+reg [31:0]		pause_timer;							// Time since pause
+reg [31:0]		pause_timer_dim = 31'h68E7780;	// Time until screen dim (10 seconds @ 11Mhz)
+
+always @(posedge clk_sys) begin
+	// User pause toggle
+	reg old_pause;
+	old_pause <= m_pause;
+	if(~old_pause & m_pause) pause_toggle <= ~pause_toggle;
+	
+	// Screen dim while paused
+	rgb_out <= {r,g,b};
+	if(pause_toggle)
+	begin
+		if(pause_timer<pause_timer_dim)
+		begin
+			pause_timer <= pause_timer + 1'b1;
+		end
+		else
+		begin
+			rgb_out <= {r >> 1,g >> 1, b >> 1};
+		end
+	end
+	else
+	begin
+		pause_timer <= 1'b0;
+	end
+end
 
 wire hblank, vblank;
 wire hs, vs;
 wire [1:0] r,g,b;
+wire [5:0] rgb_out;
 
 reg ce_pix;
 always @(posedge clk_44) begin
-        reg [2:0] div;
+	reg [2:0] div;
 
-        div <= div + 1'd1;
-        ce_pix <= !div;
+	div <= div + 1'd1;
+	ce_pix <= !div;
 end
 
 wire ce_vid;
@@ -236,17 +286,17 @@ screen_rotate screen_rotate (.*);
 
 arcade_video#(239,6) arcade_video
 (
-        .*,
+	.*,
 
-        .clk_video(clk_44),
+	.clk_video(clk_44),
 
-        .RGB_in({r,g,b}),
-        .HBlank(hblank),
-        .VBlank(vblank),
-        .HSync(hs),
-        .VSync(vs),
+	.RGB_in(rgb_out),
+	.HBlank(hblank),
+	.VBlank(vblank),
+	.HSync(hs),
+	.VSync(vs),
 
-        .fx(status[5:3])
+	.fx(status[5:3])
 );
 
 wire [11:0] audio;
@@ -276,15 +326,19 @@ assign AUDIO_S = 0;
 
 wire [7:0] dip_switch = { status[12],1'b0,1'b0,1'b0,status[14:13],status[9:8]};
 
+wire rom_download = ioctl_download && !ioctl_index;
+wire reset = RESET | status[0] | buttons[1] | rom_download;
+
 phoenix phoenix
 (
 	.clk(clk_sys),
 
-	.reset(RESET | status[0] | buttons[1] | ioctl_download),
+	.reset(reset),
+	.pause(pause),
 
 	.dn_addr(ioctl_addr[15:0]),
 	.dn_data(ioctl_dout),
-	.dn_wr(ioctl_wr),
+	.dn_wr(ioctl_wr & rom_download),
 
 	.video_r(r),
 	.video_g(g),
@@ -305,8 +359,39 @@ phoenix phoenix
 	.btn_left(m_left|m_left_2),
 	.btn_right(m_right|m_right_2),
 	.btn_barrier(m_barrier|m_barrier_2),
-	.btn_fire(m_fire|m_fire_2)
+	.btn_fire(m_fire|m_fire_2),
 
+	.hs_address(hs_address),
+	.hs_data_out(ioctl_din),
+	.hs_data_in(hs_to_ram),
+	.hs_write(hs_write)
 );
 
+
+// HISCORE SYSTEM
+// --------------
+
+wire [15:0]hs_address;
+wire [7:0]hs_to_ram;
+wire hs_write;
+wire hs_pause;
+
+assign pause = hs_pause || pause_toggle;
+
+hiscore #(16) hi (
+	.clk(clk_sys),
+	.reset(reset),
+	.delay(1'b0),
+	.ioctl_upload(ioctl_upload),
+	.ioctl_download(ioctl_download),
+	.ioctl_wr(ioctl_wr),
+	.ioctl_addr(ioctl_addr),
+	.ioctl_dout(ioctl_dout),
+	.ioctl_din(ioctl_din),
+	.ioctl_index(ioctl_index),
+	.ram_address(hs_address),
+	.data_to_ram(hs_to_ram),
+	.ram_write(hs_write),
+	.pause(hs_pause)
+);
 endmodule

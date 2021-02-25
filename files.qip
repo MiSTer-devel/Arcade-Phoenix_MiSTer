@@ -17,4 +17,5 @@ set_global_assignment -name SOURCE_FILE rtl/phoenix_effect3.vhd
 set_global_assignment -name SOURCE_FILE rtl/phoenix_music.vhd
 set_global_assignment -name SOURCE_FILE rtl/phoenix_video.vhd
 set_global_assignment -name SOURCE_FILE rtl/phoenix.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE "rtl/hiscore.sv"
 set_global_assignment -name SYSTEMVERILOG_FILE "Arcade-Phoenix.sv"

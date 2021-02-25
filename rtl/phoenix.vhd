@@ -20,6 +20,7 @@ generic (
 port(
 	clk          : in std_logic; -- 11 MHz for TV, 25 MHz for VGA
 	reset        : in std_logic;
+	pause        : in std_logic;
 	ce_pix       : out std_logic;
 	
 	dn_addr    : in  std_logic_vector(15 downto 0);
@@ -46,7 +47,13 @@ port(
 	sound_fireball: out std_logic; -- bird explodes in 2 fireballs
 	sound_ab     : out std_logic_vector(15 downto 0);
 	audio_select : in std_logic_vector(2 downto 0) := (others => '0');
-	audio        : out std_logic_vector(11 downto 0)
+	audio        : out std_logic_vector(11 downto 0);
+	
+	-- HISCORE
+	hs_address   : in  std_logic_vector(15 downto 0);
+	hs_data_out  : out std_logic_vector(7 downto 0);
+	hs_data_in   : in  std_logic_vector(7 downto 0);
+	hs_write     : in  std_logic
 );
 end phoenix;
 
@@ -59,6 +66,7 @@ architecture struct of phoenix is
  signal sync   : std_logic;
  signal adrsel : std_logic; 
  signal rdy    : std_logic := '1'; 
+ signal wait_n : std_logic; 
  signal vblank       : std_logic;
  signal hblank_bkgrd : std_logic;
  signal hblank_frgrd : std_logic; 
@@ -180,6 +188,8 @@ end generate;
   );
   reset_n <= not reset;
   ce_pix <= ce_pix1;
+
+wait_n <= rdy and (not pause);
   
 -- microprocessor 8085
 cpu8085 : entity work.T8080se
@@ -192,7 +202,7 @@ port map(
 	RESET_n => reset_n,
 	CLK     => clk,
 	CLKEN  => '1', -- fixme: use it to make 5.5 MHz clock average
-	READY  => rdy,
+	WAIT_N => wait_n,
 	HOLD  => '1',
 	INT   => '1',
 	INTE  => open,
@@ -422,15 +432,33 @@ port map
 
 -- foreground RAM   0x4000-0x433F
 -- cpu working area 0x4340-0x43FF 
-frgnd_ram : entity work.gen_ram
-generic map( dWidth => 8, aWidth => 11)
+
+--frgnd_ram : entity work.gen_ram
+--generic map( dWidth => 8, aWidth => 11)
+--port map(
+--	clk  => clk,
+--	we   => frgnd_ram_we,
+--	addr => frgnd_ram_adr,
+--	d    => cpu_do,
+--	q    => frgnd_ram_do
+--);
+
+frgnd_ram : entity work.dpram
+generic map(11,8)
 port map(
-	clk  => clk,
-	we   => frgnd_ram_we,
-	addr => frgnd_ram_adr,
-	d    => cpu_do,
-	q    => frgnd_ram_do
+	clock_a   => clk,
+	wren_a    => frgnd_ram_we,
+	address_a => frgnd_ram_adr,
+	data_a    => cpu_do,
+	q_a       => frgnd_ram_do,
+	
+	clock_b   => clk,
+	wren_b    => hs_write,
+	address_b => hs_address(10 downto 0),
+	data_b    => hs_data_in,
+	q_b       => hs_data_out
 );
+
 
 -- background RAM   0x4800-0x4B3F
 -- cpu working area 0x4B40-0x4BFF 

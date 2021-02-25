@@ -67,12 +67,12 @@ entity T8080se is
 		T2Write : integer := 0	-- 0 => WR_n active in T3, /=0 => WR_n active in T2
 	);
 	port(
-		RESET_n		: in std_logic;
-		CLK			: in std_logic;
+		RESET_n	: in std_logic;
+		CLK		: in std_logic;
 		CLKEN		: in std_logic;
-		READY		: in std_logic;
+		WAIT_N	: in std_logic;
 		HOLD		: in std_logic;
-		INT			: in std_logic;
+		INT		: in std_logic;
 		INTE		: out std_logic;
 		DBIN		: out std_logic;
 		SYNC		: out std_logic;
@@ -131,7 +131,7 @@ begin
 			Write => Write,
 			RFSH_n => open,
 			HALT_n => HALT_n,
-			WAIT_n => READY,
+			WAIT_n => WAIT_N,
 			INT_n => INT_n,
 			NMI_n => One,
 			RESET_n => RESET_n,
@@ -158,11 +158,11 @@ begin
 				DBIN <= '0';
 				WR_n <= '1';
 				if MCycle = "001" then
-					if TState = "001" or (TState = "010" and READY = '0') then
+					if TState = "001" or (TState = "010" and WAIT_N = '0') then
 						DBIN <= IntCycle_n;
 					end if;
 				else
-					if (TState = "001" or (TState = "010" and READY = '0')) and NoRead = '0' and Write = '0' then
+					if (TState = "001" or (TState = "010" and WAIT_N = '0')) and NoRead = '0' and Write = '0' then
 						DBIN <= '1';
 					end if;
 					if T2Write = 0 then
@@ -170,12 +170,12 @@ begin
 							WR_n <= '0';
 						end if;
 					else
-						if (TState = "001" or (TState = "010" and READY = '0')) and Write = '1' then
+						if (TState = "001" or (TState = "010" and WAIT_N = '0')) and Write = '1' then
 							WR_n <= '0';
 						end if;
 					end if;
 				end if;
-				if TState = "010" and READY = '1' then
+				if TState = "010" and WAIT_N = '1' then
 					DI_Reg <= DI;
 				end if;
 			end if;
