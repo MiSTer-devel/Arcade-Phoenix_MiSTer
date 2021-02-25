@@ -31,12 +31,12 @@ ARCHITECTURE SYN OF dpram IS
 BEGIN
 	altsyncram_component : altsyncram
 	GENERIC MAP (
-		address_reg_b => "CLOCK1",
+--		address_reg_b => "CLOCK1",
 		clock_enable_input_a => "NORMAL",
 		clock_enable_input_b => "NORMAL",
 		clock_enable_output_a => "BYPASS",
 		clock_enable_output_b => "BYPASS",
-		indata_reg_b => "CLOCK1",
+--		indata_reg_b => "CLOCK1",
 		intended_device_family => "Cyclone V",
 		lpm_type => "altsyncram",
 		numwords_a => 2**addr_width_g,
@@ -54,8 +54,8 @@ BEGIN
 		width_a => data_width_g,
 		width_b => data_width_g,
 		width_byteena_a => 1,
-		width_byteena_b => 1,
-		wrcontrol_wraddress_reg_b => "CLOCK1"
+		width_byteena_b => 1
+--		wrcontrol_wraddress_reg_b => "CLOCK1"
 	)
 	PORT MAP (
 		address_a => address_a,
