@@ -22,14 +22,16 @@ port(
 	reset        : in std_logic;
 	pause        : in std_logic;
 	ce_pix       : out std_logic;
-	
+
 	dn_addr    : in  std_logic_vector(15 downto 0);
 	dn_data    : in  std_logic_vector(7 downto 0);
 	dn_wr      : in  std_logic;
 
 	dip_switch   : in std_logic_vector(7 downto 0);
 	-- game controls, normal logic '1':pressed, '0':released
- 
+
+	flip_screen : in std_logic;
+
 	btn_coin: in std_logic;
 	btn_player_start: in std_logic_vector(1 downto 0);
 	btn_fire, btn_left, btn_right, btn_barrier: in std_logic;
@@ -48,7 +50,7 @@ port(
 	sound_ab     : out std_logic_vector(15 downto 0);
 	audio_select : in std_logic_vector(2 downto 0) := (others => '0');
 	audio        : out std_logic_vector(11 downto 0);
-	
+
 	-- HISCORE
 	hs_address   : in  std_logic_vector(15 downto 0);
 	hs_data_out  : out std_logic_vector(7 downto 0);
@@ -174,7 +176,7 @@ end generate;
   port map
   (
     clk11    => clk,
-	 ce_pix   => ce_pix1,
+    ce_pix   => ce_pix1,
     hcnt     => hcnt,
     vcnt     => vcnt,
     sync_hs  => video_hs,
@@ -251,7 +253,7 @@ begin
 end process;
 
 -- player2 and cocktail mode (flip horizontal/vertical)
-pl2_cocktail <= player2 and dip_switch(7);
+pl2_cocktail <= (player2 and dip_switch(7)) xor flip_screen;
 
 -- horizontal scan video RAMs address background and foreground
 -- with flip and scroll offset
