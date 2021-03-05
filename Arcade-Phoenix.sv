@@ -142,6 +142,7 @@ localparam CONF_STR = {
 	"H0OJK,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"H0O2,Orientation,Vert,Horz;",
 	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"OF,Flip Screen,Off,On;",
 	"-;",
 	"O89,Lives,3,4,5,6;",
 	"ODE,Bonus Life,3k/30k,4k/40k,5k/50k,6k/60k;",
@@ -246,7 +247,7 @@ always @(posedge clk_sys) begin
 	reg old_pause;
 	old_pause <= m_pause;
 	if(~old_pause & m_pause) pause_toggle <= ~pause_toggle;
-	
+
 	// Screen dim while paused
 	rgb_out <= {r,g,b};
 	if(pause_toggle)
@@ -353,6 +354,7 @@ phoenix phoenix
 	.audio(audio),
 
 	.dip_switch(dip_switch),
+	.flip_screen(status[15]),
 
 	.btn_coin(m_coin),
 	.btn_player_start({m_start2, m_start1}),
