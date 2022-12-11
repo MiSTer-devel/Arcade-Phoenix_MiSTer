@@ -6,6 +6,7 @@
 	<year>1981</year>
 	<manufacturer>Tehkan</manufacturer>
 	<category>Space / Shooter</category>
+	<rotation>vertical (cw)</rotation>
 	<rbf>phoenix</rbf>
 	<rom index="0" zip="pleiads.zip" md5="648468f93204c48ff27f39018828cb28">
 		<part crc="960212c8" name="ic47.r1"/>
